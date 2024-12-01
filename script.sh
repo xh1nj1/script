@@ -18,7 +18,7 @@ subenum(){
 	echo -e "\n=================="
 	echo -e "subdomain enumeration started\n"
 
-	echo -e "[+] subfinder started enumeration" && subfinder -d $TARGET -all -cs -recursive 2>/dev/null | anew subdomain.txt
+	echo -e "[+] subfinder started enumeration" && subfinder -d $TARGET -all -recursive 2>/dev/null | anew subdomain.txt
 	echo -e "[+] assetfinder started enumeration" && assetfinder -subs-only $TARGET | anew subdomain.txt
 	echo -e "[+] sublist3r started enumeration" && sublist3r -d $TARGET --no-color 2>/dev/null | anew subdomain.txt
 	}
@@ -29,7 +29,6 @@ crawl(){
 
 	echo -e "[+] katana started crawling (passive)" && cat subdomain.txt | katana -ps -pss waybackarchive,commoncrawl,alienvault -f qurl | anew url.txt
 	echo -e "[+] katana started crawling (active)" && cat subdomain.txt | katana -d 5 -f qurl | anew url.txt
-	echo -e "[+] katana started crawling (active)" && cat url.txt | katana -d 5 -f qurl | anew url.txt
 	echo -e "[+] waybackurls started crawling (passive)" && cat subdomain.txt | waybackurls | anew url.txt
 	echo -e "[+] gau started crawling (passive)" && cat subdomain.txt | gau | anew url.txt
 	echo -e "[+] urlfinder started crawling (passive)" && cat subdomain.txt | urlfinder | anew url.txt
@@ -69,3 +68,5 @@ extract(){
 recconnaisance
 subenum
 crawl
+paramine
+extract
