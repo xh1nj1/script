@@ -68,7 +68,7 @@ jobs:
           mkdir -p ${{ github.event.inputs.output }}
           cd ${{ github.event.inputs.output }}
 
-      - name: Reconnaissance: Subdomain enumeration
+      - name: Subdomain enumeration
         run: |
           cd ${{ github.event.inputs.output }}
           echo "[+] Running subdomain enumeration..."
@@ -76,7 +76,7 @@ jobs:
           assetfinder -subs-only ${{ github.event.inputs.target }} | anew subdomain.txt
           sublist3r -d ${{ github.event.inputs.target }} --no-color | anew subdomain.txt
 
-      - name: Reconnaissance: Crawling
+      - name: Crawling
         run: |
           cd ${{ github.event.inputs.output }}
           echo "[+] Crawling (passive and active)..."
@@ -86,7 +86,7 @@ jobs:
           cat subdomain.txt | gau | anew url.txt
           cat subdomain.txt | urlfinder | anew url.txt
 
-      - name: Reconnaissance: Parameter mining
+      - name: Parameter mining
         run: |
           cd ${{ github.event.inputs.output }}
           echo "[+] Parameter mining..."
@@ -95,7 +95,7 @@ jobs:
           cat url.txt | grep -E '\?.+=.+' | anew param.txt
           rm -rf result
 
-      - name: Reconnaissance: Extract interesting parameters
+      - name: Extract interesting parameters
         run: |
           cd ${{ github.event.inputs.output }}
           echo "[+] Extracting and filtering interesting parameters..."
