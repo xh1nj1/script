@@ -1,0 +1,133 @@
+name: xhinji recon
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "The target domain for recon"
+        required: true
+      output:
+        description: "Directory to save outputs"
+        required: true
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up environment
+        run: |
+          sudo apt update
+          sudo apt install -y python3-pip wget curl jq
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/*.go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Cache ParamSpider results
+        uses: actions/cache@v3
+        with:
+          path: ./ParamSpider/result
+          key: ${{ github.run_id }}-paramspider-results
+
+      - name: Install tools
+        run: |
+          # Set up Go environment
+          echo "PATH=$PATH:$(go env GOPATH)/bin" >> $GITHUB_ENV
+
+          # Install tools
+          go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
+          go install -v github.com/tomnomnom/assetfinder@latest
+          pip3 install git+https://github.com/aboul3la/Sublist3r.git
+          go install -v github.com/projectdiscovery/katana/cmd/katana@latest
+          go install -v github.com/tomnomnom/waybackurls@latest
+          go install -v github.com/lc/gau/v2/cmd/gau@latest
+          go install -v github.com/projectdiscovery/urlfinder/cmd/urlfinder@latest
+          git clone https://github.com/devanshbatham/ParamSpider.git && cd ParamSpider && pip3 install -r requirements.txt && cd ..
+          go install -v github.com/tomnomnom/anew@latest
+          go install -v github.com/Emoe/kxss@latest
+          go install -v github.com/KathanP19/Gxss@latest
+
+      - name: Create output directory
+        run: |
+          mkdir -p ${{ github.event.inputs.output }}
+          cd ${{ github.event.inputs.output }}
+
+      - name: Reconnaissance: Subdomain enumeration
+        run: |
+          cd ${{ github.event.inputs.output }}
+          echo "[+] Running subdomain enumeration..."
+          subfinder -d ${{ github.event.inputs.target }} -all -recursive | anew subdomain.txt
+          assetfinder -subs-only ${{ github.event.inputs.target }} | anew subdomain.txt
+          sublist3r -d ${{ github.event.inputs.target }} --no-color | anew subdomain.txt
+
+      - name: Reconnaissance: Crawling
+        run: |
+          cd ${{ github.event.inputs.output }}
+          echo "[+] Crawling (passive and active)..."
+          cat subdomain.txt | katana -ps -pss waybackarchive,commoncrawl,alienvault -f qurl | anew url.txt
+          cat subdomain.txt | katana -d 5 -f qurl | anew url.txt
+          cat subdomain.txt | waybackurls | anew url.txt
+          cat subdomain.txt | gau | anew url.txt
+          cat subdomain.txt | urlfinder | anew url.txt
+
+      - name: Reconnaissance: Parameter mining
+        run: |
+          cd ${{ github.event.inputs.output }}
+          echo "[+] Parameter mining..."
+          python3 ParamSpider/paramspider.py -l subdomain.txt -o result/
+          cat result/* | qsreplace | anew param.txt
+          cat url.txt | grep -E '\?.+=.+' | anew param.txt
+          rm -rf result
+
+      - name: Reconnaissance: Extract interesting parameters
+        run: |
+          cd ${{ github.event.inputs.output }}
+          echo "[+] Extracting and filtering interesting parameters..."
+          mkdir -p interesting && cd interesting
+          
+          # Filter LFI parameters
+          cat ../param.txt | grep -Ei '(\b(file|dir|path|doc|root|folder|img|src|template|home)\b=|\b(\.\./|\.\.\\))' | anew lfi_params.txt
+
+          # Filter Open Redirect parameters
+          cat ../param.txt | grep -Ei '(\b(url|next|redir|redirect|callback|to|goto|view)\b=|//.*)' | anew redirect_params.txt
+
+          # Filter XSS parameters
+          cat ../param.txt | grep -Ei '(\b(script|alert|on\w*|eval|src|data|load)\b=|<|>|%3c|%3e|javascript:)' | anew xss_params.txt
+
+          # Filter SQLi parameters
+          cat ../param.txt | grep -Ei '(\b(id|select|query|search|order|sort|limit|offset|group|key|id[]|uname|user|pass)\b=|\bUNION\b|\bSELECT\b)' | anew sqli_params.txt
+
+          # Filter CRLF Injection
+          cat ../param.txt | grep -Ei '%0d%0a' | anew crlf_injection.txt
+
+          # Filter Parameter Pollution
+          cat ../param.txt | grep -Ei '(\b[a-zA-Z0-9_]+=.*&\1=)' | anew param_pollution.txt
+
+          # Filter SSTi parameters
+          cat ../param.txt | grep -Ei '(\b(template|handlebars|mustache|twig|jinja2|tornado|erb|ftl|vm)\b=)' | anew ssti_params.txt
+
+          # Filter IDOR parameters
+          cat ../param.txt | grep -Ei '(\b(user|account|profile|id|user_id|session|order_id|uid|oid)\b=)' | anew idor_params.txt
+
+          # Filter Path Traversal
+          cat ../param.txt | grep -Ei '(\.\./|\.\.\\|/etc/passwd|/etc/shadow|C:\\\\)' | anew path_traversal.txt
+
+      - name: Output Results
+        run: |
+          echo "Recon results saved in: ${{ github.event.inputs.output }}"
